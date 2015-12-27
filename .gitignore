@@ -6,3 +6,9 @@
 
 # Compiled Static libraries
 *.lib
+
+*.pyc
+
+MNIST_data/*
+
+
