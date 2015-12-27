@@ -10,5 +10,6 @@
 *.pyc
 
 MNIST_data/*
-
+checkpoint
+model.ckpt
 

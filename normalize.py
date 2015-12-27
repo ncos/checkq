@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import tesseract
 import cv2
 import cv2.cv as cv
 import numpy as np
@@ -68,17 +67,9 @@ class Normalize:
         self.orig_bgr = cv2.resize(self.orig_bgr, None, fx=0.2, fy=0.2, interpolation = cv2.INTER_CUBIC)
         self.orig_hsv = cv2.cvtColor(self.orig_bgr, cv2.COLOR_BGR2HSV)
         self.orig_gry = cv2.cvtColor(self.orig_bgr, cv2.COLOR_BGR2GRAY)
-
         self.orig_blr = cv2.blur(self.orig_gry, (3, 3))
 
-        api = tesseract.TessBaseAPI()
-        api.Init(".","eng",tesseract.OEM_DEFAULT)
-        #api.SetPageSegMode(tesseract.PSM_SINGLE_WORD)
-        api.SetPageSegMode(tesseract.PSM_AUTO)
-        tesseract.SetCvImage(self.orig_gry, api)
-        #text=api.GetUTF8Text()
-        #conf=api.MeanTextConf()
-        #print text
+
 
 
 
@@ -100,7 +91,7 @@ class Normalize:
         img = self.orig_bgr.copy()
         contours, hierarchy = cv2.findContours(thresh.copy(), 1, 2)
  
-
+        
 
         return [self.orig_gry, dilated, thresh, img]
 
