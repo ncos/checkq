@@ -1,8 +1,8 @@
 #!/usr/bin/python
 
 import cv2
-import cv2.cv as cv
 import numpy as np
+import tflow_recognize as rcgn
 
 class ImageDisplay:
     def __init__(self, windowname):
@@ -79,56 +79,48 @@ class Normalize:
     def init_interface(self, windowname):
         self.windowname = windowname
         cv2.createTrackbar('d1', self.windowname, 1, 30, self.nothing)
-        cv2.createTrackbar('S1', self.windowname, 1, 15,  self.nothing)
-        cv2.createTrackbar('d2', self.windowname, 0, 15,  self.nothing)
+        cv2.createTrackbar('S1', self.windowname, 0, 200,  self.nothing)
+        cv2.createTrackbar('d2', self.windowname, 1, 30,  self.nothing)
         cv2.createTrackbar('S2', self.windowname, 0, 200, self.nothing)
  
     def get(self):
-        normalized = self.prepare(self.orig_blr.copy())
-        return [self.orig_gry] + normalized
+        normalized, background = self.strengthen(self.orig_bgr.copy())
+        me = self.middle_end(normalized, background)
+        return [self.orig_gry, normalized] + me
 
-    def prepare(self, img):
-        thresh = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-        contours, hierarchy = cv2.findContours(thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    def strengthen(self, img):        
+        dilated_0 = self.dilate(self.orig_blr, 11, 2)
+        opened_0 = self.dilate(cv2.bitwise_not(dilated_0), 11, 2)
+        ret, mask = cv2.threshold(opened_0, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         
+        img[mask == 255] = (0, 0, 0)        
+        gry = self.orig_blr.copy()
+        gry[mask == 255] = 0
+
+        dilate_1 = self.dilate(cv2.bitwise_not(gry), 11, 3)
+        ret, sure_bg = cv2.threshold(dilate_1, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        gry[sure_bg == 0] = 0
+        return (gry, sure_bg)
+
+    def middle_end(self, img, background):
         S2 = cv2.getTrackbarPos('S2', self.windowname)
 
+        thresh = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+        im2, contours, hierarchy = cv2.findContours(thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        good_cnt = []
-        approx_cnt = []
-        rects = []
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area == 0:
-                continue
-
-            perimeter = cv2.arcLength(cnt, True)
-            if perimeter == 0:
-                continue
-        
-            p_a = perimeter/area
-            if p_a > 1:
-                continue
-
-
-            approx = cv2.convexHull(cnt)
-            approx_cnt.append(approx)
-                
-            good_cnt.append(cnt)
-            rect = cv2.minAreaRect(cnt)
-            rects.append(rect)
-
+        cnt = self.filter_cnt(contours)
         hud = self.orig_bgr.copy()
-        cv2.drawContours(hud, [good_cnt[S2]], -1, (0,255,0), 3)
 
-        test = self.cnt_to_img(self.orig_gry.copy(), good_cnt[S2])
+        cv2.drawContours(hud, [cnt[S2]], -1, (0,255,0), 3)
+        test = self.cnt_to_img(self.orig_gry.copy(), cnt[S2])
+        
+        print rcgn.recognize(test)
+
         return [thresh, hud, test]
 
     def cnt_to_img(self, img, cnt):
         rect = cv2.minAreaRect(cnt)
         x,y,w,h = cv2.boundingRect(cnt)
-        print rect
-        print w, h
 
         angle = rect[2]
         if (rect[1][0] > rect[1][1]):
@@ -136,14 +128,31 @@ class Normalize:
 
         mask = np.zeros_like(img)
         cv2.drawContours(mask, [cnt], -1, 255, 3)
+        
+        s = int(float(h)*0.4)
+        roi = mask[y-s/2.0:y+h+s/2.0,x-w/2.0-s/2.0:x+h-w/2.0+s/2.0]
 
-        roi = mask[y:y+h,x-w/2.0:x+h-w/2.0]
-
-        M = cv2.getRotationMatrix2D((h/2, h/2), angle, 1)
-        roi = cv2.warpAffine(roi, M, (h, h))
-
+        M = cv2.getRotationMatrix2D(((h+s)/2, (h+s)/2), angle, 1)
+        roi = cv2.warpAffine(roi, M, (h+s, h+s))
         return roi
 
+    def filter_cnt(self, contours):
+        good_cnt = []
+        for cnt in contours:
+            area = float(cv2.contourArea(cnt))
+            if area == 0.0:
+                continue
+
+            perimeter = float(cv2.arcLength(cnt, True))
+            if perimeter == 0.0:
+                continue
+        
+            p_a = perimeter/area
+            if p_a > 1.0:
+                continue
+                
+            good_cnt.append(cnt)
+        return good_cnt
 
     def postprocess(self, img):
         d1 = cv2.getTrackbarPos('d1', self.windowname)
@@ -156,7 +165,6 @@ class Normalize:
         
         return [dilated, thresh]
 
-
     def dilate(self, ary, N, iterations):
         kernel = np.zeros((N,N), dtype=np.uint8)
         kernel[(N-1)/2,:] = 1
@@ -165,21 +173,6 @@ class Normalize:
         kernel[:,(N-1)/2] = 1
         dilated_image = cv2.dilate(dilated_image, kernel, iterations=iterations)
         return dilated_image
-
-    def get_text_th(self, img):
-        d2 = cv2.getTrackbarPos('d2', self.windowname)
-        S2 = cv2.getTrackbarPos('S2', self.windowname)
-        d1 = cv2.getTrackbarPos('d1', self.windowname)
-        S1 = cv2.getTrackbarPos('S1', self.windowname)
-
-        lapl = cv2.Laplacian(img, cv2.CV_32F)
-        bilat = cv2.bilateralFilter(lapl, 6, 75, 75)
-
-        ret, bth = cv2.threshold(bilat, 0.9, 1, cv2.THRESH_BINARY_INV)
-        bth = np.mat(bth * 255, np.uint8)
-
-        merge = cv2.bitwise_and(img, bth)
-        return [bilat, merge]
 
     def nothing(self, x):
         pass
