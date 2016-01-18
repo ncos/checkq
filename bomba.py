@@ -68,33 +68,22 @@ class Process:
     def __init__(self, path):
         self.windowname = ''
         self.orig_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
-        #self.orig_bgr = cv2.resize(self.orig_bgr, None, fx=1.0, fy=1.0, interpolation = cv2.INTER_CUBIC)
+        self.orig_bgr = cv2.resize(self.orig_bgr, None, fx=1.0, fy=1.0, interpolation = cv2.INTER_CUBIC)
         self.orig_hsv = cv2.cvtColor(self.orig_bgr, cv2.COLOR_BGR2HSV)
         self.orig_gry = cv2.cvtColor(self.orig_bgr, cv2.COLOR_BGR2GRAY)
-        self.denoise_rgb = self.denoise(self.orig_bgr.copy(), False)
-        self.denoise_hsv = cv2.cvtColor(self.denoise_rgb, cv2.COLOR_BGR2HSV)
-        self.denoise_gry = cv2.cvtColor(self.denoise_rgb, cv2.COLOR_BGR2GRAY)
 
     def nothing(self):
         return
 
     def init_interface(self, windowname):
         self.windowname = windowname
-        cv2.createTrackbar('l1', self.windowname, 0, 255, self.nothing)
-        cv2.createTrackbar('l2', self.windowname, 0, 255, self.nothing)
+        cv2.createTrackbar('l1', self.windowname, 10, 255, self.nothing)
+        cv2.createTrackbar('l2', self.windowname, 5, 255, self.nothing)
         cv2.createTrackbar('l3', self.windowname, 0, 255, self.nothing)
         cv2.createTrackbar('r1', self.windowname, 255, 255, self.nothing)
         cv2.createTrackbar('r2', self.windowname, 255, 255, self.nothing)
         cv2.createTrackbar('r3', self.windowname, 255, 255, self.nothing)
 
-    def denoise(self, image, FM=True):
-        if FM:
-            return cv2.fastNlMeansDenoisingColored(image, templateWindowSize=7,
-                                                          searchWindowSize=21,
-                                                          h=3,
-                                                          hColor=10)
-
-        return cv2.bilateralFilter(self.orig_hsv, 5, 50, 50)
 
     def hist(self, image):
         from matplotlib import pyplot as plt
@@ -111,7 +100,7 @@ class Process:
 
 
         # Remove light     
-        h, s, v = cv2.split(self.denoise_hsv)
+        h, s, v = cv2.split(self.orig_hsv)
         kernel = np.ones((9*2+1, 9*2+1), np.uint8)
         v_dilated = cv2.dilate(v, kernel, iterations = 1)
         v_out = cv2.subtract(v_dilated, v)
@@ -121,16 +110,21 @@ class Process:
         # Binarization
         #ret, ots = cv2.threshold(v_out, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
+        #et, ots2 = cv2.threshold(v, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
 
-        self.hist(v_out)
+        #self.hist(v_out)
+        #for i in xrange(l1):
+        #    ret, mask = cv2.threshold(v_out, l2, 255, cv2.THRESH_TOZERO)
+        #    v_out = cv2.bitwise_and(v_out, mask)
+        #    v_out = cv2.add(v_out, (v_out/l3))
 
-        res = cv2.merge((h, s, v_out))
-        out = cv2.cvtColor(res, cv2.COLOR_HSV2BGR)
+        v_out = cv2.bitwise_not(v_out)
 
-        out = cv2.bitwise_not(out)
+        th3 = cv2.adaptiveThreshold(v, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,l1*2+1,l2)
+        th4 = cv2.adaptiveThreshold(v_out, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,l1*2+1,l2)
 
-        return [h, s, v_out]
+        return [v_out, th3, th4]
 
 
 
